@@ -2,23 +2,44 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { supabase } from '../../lib/supabase';
 
 export default function Contact() {
   const [form, setForm] = useState({
     name: '', email: '', phone: '', occasion: '', date: '', guests: '', message: ''
   });
   const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
+    setLoading(true);
+    setError('');
+
+    const { error } = await supabase.from('bookings').insert([{
+      name: form.name,
+      email: form.email,
+      phone: form.phone,
+      occasion: form.occasion,
+      event_date: form.date,
+      guests: parseInt(form.guests),
+      message: form.message,
+    }]);
+
+    if (error) {
+      setError('Something went wrong. Please try again or call us directly.');
+      setLoading(false);
+    } else {
+      setSubmitted(true);
+      setLoading(false);
+    }
   };
 
   return (
     <section id="contact" className="bg-[#111] py-24 px-6 lg:px-16">
       <div className="max-w-7xl mx-auto">
 
-        {/* Header */}
         <div className="text-center mb-16">
           <span className="text-[#d4a017] text-xs tracking-[0.25em] uppercase block mb-3">Get In Touch</span>
           <h2 className="font-display text-4xl lg:text-6xl font-light text-[#fafaf8]">
@@ -46,7 +67,6 @@ export default function Contact() {
               </div>
             ))}
 
-            {/* Pricing preview */}
             <div className="bg-[#0a0a0a] p-6 mt-4">
               <p className="text-[#d4a017] text-xs tracking-[0.2em] uppercase mb-4">Starting Prices</p>
               {[
@@ -69,8 +89,9 @@ export default function Contact() {
             <h3 className="font-display text-2xl font-light text-[#fafaf8] mb-8">Book Your Event</h3>
             {submitted ? (
               <div className="bg-[#d4a017]/10 border border-[#d4a017]/30 p-8 text-center">
-                <p className="text-[#d4a017] font-display text-2xl mb-2">Thank You!</p>
-                <p className="text-[#fafaf8]/60 text-sm">We've received your booking request and will contact you within 24 hours.</p>
+                <div className="text-4xl mb-4">✅</div>
+                <p className="text-[#d4a017] font-display text-2xl mb-2">Booking Received!</p>
+                <p className="text-[#fafaf8]/60 text-sm">Thank you! We have received your booking request and will contact you within 24 hours.</p>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -144,11 +165,16 @@ export default function Contact() {
                   />
                 </div>
 
+                {error && (
+                  <p className="text-red-400 text-sm">{error}</p>
+                )}
+
                 <button
                   type="submit"
-                  className="bg-[#d4a017] text-[#0a0a0a] py-4 text-xs font-bold tracking-[0.2em] uppercase hover:bg-[#e8c04a] transition-colors mt-2"
+                  disabled={loading}
+                  className="bg-[#d4a017] text-[#0a0a0a] py-4 text-xs font-bold tracking-[0.2em] uppercase hover:bg-[#e8c04a] transition-colors mt-2 disabled:opacity-50"
                 >
-                  Submit Booking Request
+                  {loading ? 'Submitting...' : 'Submit Booking Request'}
                 </button>
               </form>
             )}
