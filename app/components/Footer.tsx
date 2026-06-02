@@ -31,7 +31,7 @@ export default function Footer() {
           </div>
         </div>
         <div className="border-t border-[#fafaf8]/5 pt-6 text-center text-xs text-[#fafaf8]/20">
-          © 2025 Culinary Harmony · Blantyre, Malawi · All rights reserved
+          © 2026 Culinary Harmony · Blantyre, Malawi · All rights reserved
         </div>
       </div>
     </footer>

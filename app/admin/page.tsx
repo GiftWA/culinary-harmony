@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import Image from 'next/image';
 
 const ADMIN_PASSWORD = 'culinaryharmony2026';
 
@@ -18,6 +17,12 @@ type Booking = {
   created_at: string;
 };
 
+type GalleryFile = {
+  name: string;
+  url: string;
+  category: string;
+};
+
 export default function AdminPage() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [password, setPassword] = useState('');
@@ -26,7 +31,40 @@ export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<'bookings' | 'gallery'>('bookings');
   const [uploading, setUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState('');
-  const [galleryImages, setGalleryImages] = useState<string[]>([]);
+  const [galleryFiles, setGalleryFiles] = useState<GalleryFile[]>([]);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [pendingDeleteUrl, setPendingDeleteUrl] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  
+  const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set());
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [categories, setCategories] = useState<string[]>(['All', 'Uncategorized']);
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [newCategory, setNewCategory] = useState('');
+  const [showCategoryInput, setShowCategoryInput] = useState(false);
+  const [uploadCategory, setUploadCategory] = useState<string>('Uncategorized');
+
+  // Load categories from localStorage on mount
+  useEffect(() => {
+    const savedCategories = localStorage.getItem('galleryCategories');
+    if (savedCategories) {
+      const parsed = JSON.parse(savedCategories);
+      setCategories(['All', ...parsed, 'Uncategorized']);
+    }
+  }, []);
+
+  const saveCategory = (categoryName: string) => {
+    const existingCategories = categories.filter(c => c !== 'All' && c !== 'Uncategorized');
+    if (!existingCategories.includes(categoryName)) {
+      const newCategories = [...existingCategories, categoryName];
+      localStorage.setItem('galleryCategories', JSON.stringify(newCategories));
+      setCategories(['All', ...newCategories, 'Uncategorized']);
+    }
+  };
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,43 +92,213 @@ export default function AdminPage() {
   };
 
   const fetchGallery = async () => {
-    const { data } = await supabase.storage.from('gallery').list('', { limit: 100 });
+    const { data, error } = await supabase.storage.from('gallery').list('', { limit: 1000 });
+    if (error) {
+      console.error('Error fetching gallery:', error);
+      return;
+    }
     if (data) {
-      const urls = data.map((file) => {
-        const { data: urlData } = supabase.storage.from('gallery').getPublicUrl(file.name);
-        return urlData.publicUrl;
+      // Get saved categories from localStorage
+      const savedCategories = localStorage.getItem('galleryCategories');
+      let knownCategories: string[] = savedCategories ? JSON.parse(savedCategories) : [];
+      
+      const filesWithUrls = data.map((file) => {
+        let category = 'Uncategorized';
+        const fileName = file.name;
+        
+        // Check for category prefix in filename (format: "category_filename.jpg")
+        const underscoreIndex = fileName.indexOf('_');
+        if (underscoreIndex > 0) {
+          const potentialCategory = fileName.substring(0, underscoreIndex);
+          const formattedCategory = potentialCategory.charAt(0).toUpperCase() + potentialCategory.slice(1);
+          
+          // If this category exists in known categories OR is a common category
+          if (knownCategories.includes(formattedCategory)) {
+            category = formattedCategory;
+          } else if (['Wedding', 'Birthday', 'Corporate', 'Events', 'Bridal', 'Party', 'Shower'].includes(formattedCategory)) {
+            category = formattedCategory;
+            // Add to known categories
+            if (!knownCategories.includes(formattedCategory)) {
+              knownCategories.push(formattedCategory);
+              localStorage.setItem('galleryCategories', JSON.stringify(knownCategories));
+            }
+          }
+        }
+        
+        return {
+          name: file.name,
+          url: supabase.storage.from('gallery').getPublicUrl(file.name).data.publicUrl,
+          category: category
+        };
       });
-      setGalleryImages(urls);
+      
+      setGalleryFiles(filesWithUrls);
+      
+      // Build categories list (excluding duplicates)
+      const uniqueCategories = new Set(filesWithUrls.map(f => f.category));
+      const sortedCategories = ['All', ...Array.from(uniqueCategories).filter(c => c !== 'Uncategorized').sort(), 'Uncategorized'];
+      setCategories(sortedCategories);
     }
   };
 
- const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const files = e.target.files;
-  if (!files || files.length === 0) return;
-  setUploading(true);
-  setUploadSuccess('');
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
 
-  let successCount = 0;
-  for (const file of Array.from(files)) {
-    const fileName = `${Date.now()}-${file.name}`;
-    const { error } = await supabase.storage.from('gallery').upload(fileName, file);
-    if (!error) successCount++;
-  }
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
 
-  if (successCount === files.length) {
-    setUploadSuccess(`${successCount} photo(s) uploaded successfully!`);
-  } else {
-    setUploadSuccess(`${successCount} of ${files.length} photos uploaded.`);
-  }
-  fetchGallery();
-  setUploading(false);
-};
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) {
+      await uploadFiles(files);
+    }
+  };
 
-  const handleDelete = async (url: string) => {
-    const fileName = url.split('/').pop();
-    if (!fileName) return;
-    await supabase.storage.from('gallery').remove([fileName]);
-    fetchGallery();
+  const handleFileInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    await uploadFiles(Array.from(files));
+  };
+
+  const uploadFiles = async (files: File[]) => {
+    setUploading(true);
+    setUploadSuccess('');
+
+    let successCount = 0;
+    
+    for (const file of files) {
+      let categoryForUpload = uploadCategory;
+      if (categoryForUpload === 'All') {
+        categoryForUpload = 'Uncategorized';
+      }
+      
+      const categoryName = categoryForUpload !== 'Uncategorized' 
+        ? categoryForUpload.toLowerCase().replace(/\s/g, '_')
+        : '';
+      
+      const fileName = categoryName 
+        ? `${categoryName}_${Date.now()}-${file.name}`
+        : `${Date.now()}-${file.name}`;
+      
+      const { error } = await supabase.storage.from('gallery').upload(fileName, file);
+      if (!error) successCount++;
+    }
+
+    if (successCount === files.length) {
+      setUploadSuccess(`${successCount} photo(s) uploaded successfully!`);
+      showToast(`${successCount} photo(s) uploaded successfully!`, 'success');
+    } else {
+      setUploadSuccess(`${successCount} of ${files.length} photos uploaded.`);
+      showToast(`${successCount} of ${files.length} photos uploaded.`, 'error');
+    }
+    await fetchGallery();
+    setUploading(false);
+  };
+
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleDeleteClick = (url: string) => {
+    setPendingDeleteUrl(url);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDeleteUrl) return;
+    
+    setShowDeleteModal(false);
+    setDeleting(pendingDeleteUrl);
+    
+    try {
+      const fileToDelete = galleryFiles.find(file => file.url === pendingDeleteUrl);
+      
+      if (!fileToDelete) {
+        showToast('Could not find the file to delete', 'error');
+        setDeleting(null);
+        setPendingDeleteUrl(null);
+        return;
+      }
+      
+      const { error: deleteError } = await supabase.storage
+        .from('gallery')
+        .remove([fileToDelete.name]);
+      
+      if (deleteError) {
+        showToast('Delete failed: ' + deleteError.message, 'error');
+      } else {
+        setGalleryFiles(prev => prev.filter(file => file.url !== pendingDeleteUrl));
+        showToast('Photo deleted successfully!', 'success');
+        await fetchGallery();
+      }
+    } catch (err) {
+      console.error('Unexpected error:', err);
+      showToast('An unexpected error occurred', 'error');
+    } finally {
+      setDeleting(null);
+      setPendingDeleteUrl(null);
+    }
+  };
+
+  const toggleImageSelection = (url: string) => {
+    const newSelection = new Set(selectedImages);
+    if (newSelection.has(url)) {
+      newSelection.delete(url);
+    } else {
+      newSelection.add(url);
+    }
+    setSelectedImages(newSelection);
+  };
+
+  const selectAll = () => {
+    const filteredFiles = getFilteredFiles();
+    if (selectedImages.size === filteredFiles.length) {
+      setSelectedImages(new Set());
+    } else {
+      setSelectedImages(new Set(filteredFiles.map(f => f.url)));
+    }
+  };
+
+  const confirmBulkDelete = async () => {
+    setShowBulkDeleteModal(false);
+    const filesToDelete = galleryFiles.filter(file => selectedImages.has(file.url));
+    
+    for (const file of filesToDelete) {
+      await supabase.storage.from('gallery').remove([file.name]);
+    }
+    
+    setSelectedImages(new Set());
+    await fetchGallery();
+    showToast(`${filesToDelete.length} photo(s) deleted successfully!`, 'success');
+  };
+
+  const getFilteredFiles = () => {
+    if (selectedCategory === 'All') {
+      return galleryFiles;
+    }
+    return galleryFiles.filter(file => file.category === selectedCategory);
+  };
+
+  const openPreview = (url: string) => {
+    setPreviewImage(url);
+  };
+
+  const createNewCategory = () => {
+    if (newCategory && !categories.includes(newCategory)) {
+      saveCategory(newCategory);
+      setSelectedCategory(newCategory);
+      setUploadCategory(newCategory);
+      setShowCategoryInput(false);
+      showToast(`Category "${newCategory}" created! Now upload photos to this category.`, 'success');
+      setNewCategory('');
+    }
   };
 
   if (!loggedIn) {
@@ -98,7 +306,7 @@ export default function AdminPage() {
       <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center px-4">
         <div className="w-full max-w-md">
           <div className="text-center mb-8">
-            <Image src="/images/logo-circle.png" alt="Logo" width={80} height={80} className="rounded-full border-2 border-[#d4a017] mx-auto mb-4" />
+            <img src="/images/logo-circle.png" alt="Logo" width={80} height={80} className="rounded-full border-2 border-[#d4a017] mx-auto mb-4" />
             <h1 className="font-display text-3xl font-light text-[#fafaf8]">
               Culinary <span className="text-[#d4a017]">Harmony</span>
             </h1>
@@ -130,13 +338,15 @@ export default function AdminPage() {
     );
   }
 
+  const filteredFiles = getFilteredFiles();
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-[#fafaf8]">
 
       {/* Header */}
       <div className="bg-[#111] border-b border-[#d4a017]/20 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Image src="/images/logo-circle.png" alt="Logo" width={40} height={40} className="rounded-full border border-[#d4a017]/40" />
+          <img src="/images/logo-circle.png" alt="Logo" width={40} height={40} className="rounded-full border border-[#d4a017]/40" />
           <div>
             <p className="font-display text-lg text-[#fafaf8]">Culinary <span className="text-[#d4a017]">Harmony</span></p>
             <p className="text-[#fafaf8]/30 text-xs">Admin Dashboard</p>
@@ -182,47 +392,47 @@ export default function AdminPage() {
             ) : (
               <div className="flex flex-col gap-4">
                {bookings.map((booking) => (
-  <div key={booking.id} className="bg-[#111] border border-[#fafaf8]/10 p-6 hover:border-[#d4a017]/30 transition-colors">
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-      <div>
-        <p className="text-[#d4a017] text-xs uppercase tracking-widest mb-1">Name</p>
-        <p className="text-[#fafaf8] font-medium">{booking.name}</p>
-      </div>
-      <div>
-        <p className="text-[#d4a017] text-xs uppercase tracking-widest mb-1">Occasion</p>
-        <p className="text-[#fafaf8]">{booking.occasion}</p>
-      </div>
-      <div>
-        <p className="text-[#d4a017] text-xs uppercase tracking-widest mb-1">Event Date</p>
-        <p className="text-[#fafaf8]">{new Date(booking.event_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
-      </div>
-      <div>
-        <p className="text-[#d4a017] text-xs uppercase tracking-widest mb-1">Guests</p>
-        <p className="text-[#fafaf8]">{booking.guests} people</p>
-      </div>
-    </div>
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t border-[#fafaf8]/5">
-      <div>
-        <p className="text-[#d4a017] text-xs uppercase tracking-widest mb-1">Email</p>
-        <a href={`mailto:${booking.email}`} className="text-[#fafaf8]/70 text-sm hover:text-[#d4a017]">{booking.email}</a>
-      </div>
-      <div>
-        <p className="text-[#d4a017] text-xs uppercase tracking-widest mb-1">Phone</p>
-        <a href={`tel:${booking.phone}`} className="text-[#fafaf8]/70 text-sm hover:text-[#d4a017]">{booking.phone}</a>
-      </div>
-      <div>
-        <p className="text-[#d4a017] text-xs uppercase tracking-widest mb-1">Date Received</p>
-        <p className="text-[#fafaf8]/70 text-sm">{new Date(booking.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
-      </div>
-      <div>
-        <p className="text-[#d4a017] text-xs uppercase tracking-widest mb-1">Time</p>
-        <p className="text-[#fafaf8]/70 text-sm">{new Date(booking.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</p>
-      </div>
-    </div>
-    {booking.message && (
-      <div className="mt-4 pt-4 border-t border-[#fafaf8]/5">
-        <p className="text-[#d4a017] text-xs uppercase tracking-widest mb-1">Message</p>
-        <p className="text-[#fafaf8]/60 text-sm">{booking.message}</p>
+                  <div key={booking.id} className="bg-[#111] border border-[#fafaf8]/10 p-6 hover:border-[#d4a017]/30 transition-colors">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                      <div>
+                        <p className="text-[#d4a017] text-xs uppercase tracking-widest mb-1">Name</p>
+                        <p className="text-[#fafaf8] font-medium">{booking.name}</p>
+                      </div>
+                      <div>
+                        <p className="text-[#d4a017] text-xs uppercase tracking-widest mb-1">Occasion</p>
+                        <p className="text-[#fafaf8]">{booking.occasion}</p>
+                      </div>
+                      <div>
+                        <p className="text-[#d4a017] text-xs uppercase tracking-widest mb-1">Event Date</p>
+                        <p className="text-[#fafaf8]">{new Date(booking.event_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+                      </div>
+                      <div>
+                        <p className="text-[#d4a017] text-xs uppercase tracking-widest mb-1">Guests</p>
+                        <p className="text-[#fafaf8]">{booking.guests} people</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t border-[#fafaf8]/5">
+                      <div>
+                        <p className="text-[#d4a017] text-xs uppercase tracking-widest mb-1">Email</p>
+                        <a href={`mailto:${booking.email}`} className="text-[#fafaf8]/70 text-sm hover:text-[#d4a017]">{booking.email}</a>
+                      </div>
+                      <div>
+                        <p className="text-[#d4a017] text-xs uppercase tracking-widest mb-1">Phone</p>
+                        <a href={`tel:${booking.phone}`} className="text-[#fafaf8]/70 text-sm hover:text-[#d4a017]">{booking.phone}</a>
+                      </div>
+                      <div>
+                        <p className="text-[#d4a017] text-xs uppercase tracking-widest mb-1">Date Received</p>
+                        <p className="text-[#fafaf8]/70 text-sm">{new Date(booking.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+                      </div>
+                      <div>
+                        <p className="text-[#d4a017] text-xs uppercase tracking-widest mb-1">Time</p>
+                        <p className="text-[#fafaf8]/70 text-sm">{new Date(booking.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</p>
+                      </div>
+                    </div>
+                    {booking.message && (
+                      <div className="mt-4 pt-4 border-t border-[#fafaf8]/5">
+                        <p className="text-[#d4a017] text-xs uppercase tracking-widest mb-1">Message</p>
+                        <p className="text-[#fafaf8]/60 text-sm">{booking.message}</p>
                       </div>
                     )}
                   </div>
@@ -235,31 +445,159 @@ export default function AdminPage() {
         {/* Gallery Tab */}
         {activeTab === 'gallery' && (
           <div>
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
               <h2 className="font-display text-2xl font-light">Gallery Photos</h2>
-              <label className="bg-[#d4a017] text-[#0a0a0a] px-6 py-3 text-xs font-bold tracking-[0.15em] uppercase cursor-pointer hover:bg-[#e8c04a] transition-colors">
-                {uploading ? 'Uploading...' : '+ Upload Photo'}
-               <input type="file" accept="image/*" multiple onChange={handleUpload} className="hidden" disabled={uploading} />
-              </label>
+              <div className="flex gap-3">
+                {selectedImages.size > 0 && (
+                  <button
+                    onClick={() => setShowBulkDeleteModal(true)}
+                    className="bg-red-500 text-white px-6 py-3 text-xs font-bold tracking-[0.15em] uppercase hover:bg-red-600 transition-colors"
+                  >
+                    Delete Selected ({selectedImages.size})
+                  </button>
+                )}
+                <button
+                  onClick={selectAll}
+                  className="border border-[#d4a017] text-[#d4a017] px-6 py-3 text-xs font-bold tracking-[0.15em] uppercase hover:bg-[#d4a017]/10 transition-colors"
+                >
+                  {selectedImages.size === filteredFiles.length && filteredFiles.length > 0 ? 'Deselect All' : 'Select All'}
+                </button>
+                <label className={`bg-[#d4a017] text-[#0a0a0a] px-6 py-3 text-xs font-bold tracking-[0.15em] uppercase cursor-pointer hover:bg-[#e8c04a] transition-colors ${isDragging ? 'ring-2 ring-white' : ''}`}>
+                  {uploading ? 'Uploading...' : '+ Upload Photo'}
+                  <input type="file" accept="image/*" multiple onChange={handleFileInput} className="hidden" disabled={uploading} />
+                </label>
+              </div>
             </div>
+
+            {/* Category Selection for Upload */}
+            <div className="mb-4 flex items-center gap-3 flex-wrap">
+              <span className="text-xs text-[#fafaf8]/60 uppercase tracking-widest">Upload to:</span>
+              <select
+                value={uploadCategory}
+                onChange={(e) => setUploadCategory(e.target.value)}
+                className="bg-[#111] border border-[#d4a017]/30 text-[#fafaf8] px-4 py-2 text-sm focus:outline-none"
+              >
+                {categories.filter(c => c !== 'All').map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Category Filter */}
+            <div className="mb-6 flex gap-2 flex-wrap">
+              {categories.map(cat => {
+                const count = cat === 'All' 
+                  ? galleryFiles.length 
+                  : galleryFiles.filter(f => f.category === cat).length;
+                
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => setSelectedCategory(cat)}
+                    className={`px-4 py-2 text-xs uppercase tracking-widest transition-colors ${
+                      selectedCategory === cat
+                        ? 'bg-[#d4a017] text-[#0a0a0a]'
+                        : 'border border-[#fafaf8]/20 text-[#fafaf8]/60 hover:border-[#d4a017] hover:text-[#d4a017]'
+                    }`}
+                  >
+                    {cat} {cat !== 'All' && `(${count})`}
+                  </button>
+                );
+              })}
+              <button
+                onClick={() => setShowCategoryInput(!showCategoryInput)}
+                className="px-4 py-2 text-xs uppercase tracking-widest border border-dashed border-[#fafaf8]/20 text-[#fafaf8]/60 hover:border-[#d4a017] hover:text-[#d4a017]"
+              >
+                + New Category
+              </button>
+            </div>
+
+            {/* New Category Input */}
+            {showCategoryInput && (
+              <div className="mb-6 flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Enter category name (e.g., Bridal Shower)"
+                  value={newCategory}
+                  onChange={(e) => setNewCategory(e.target.value)}
+                  className="bg-[#111] border border-[#fafaf8]/10 text-[#fafaf8] px-4 py-2 text-sm flex-1"
+                />
+                <button
+                  onClick={createNewCategory}
+                  className="bg-[#d4a017] text-[#0a0a0a] px-6 py-2 text-xs font-bold uppercase"
+                >
+                  Create
+                </button>
+              </div>
+            )}
+
+            {/* Drag and Drop Zone */}
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={`mb-6 border-2 border-dashed transition-colors p-8 text-center ${
+                isDragging ? 'border-[#d4a017] bg-[#d4a017]/10' : 'border-[#fafaf8]/20'
+              }`}
+            >
+              <p className="text-[#fafaf8]/60 text-sm">
+                {isDragging ? 'Drop your photos here!' : `📸 Drag & drop photos here (will be saved to "${uploadCategory}" category)`}
+              </p>
+            </div>
+
             {uploadSuccess && (
               <p className={`mb-4 text-sm ${uploadSuccess.includes('failed') ? 'text-red-400' : 'text-green-400'}`}>
                 {uploadSuccess}
               </p>
             )}
-            {galleryImages.length === 0 ? (
-              <p className="text-[#fafaf8]/40">No photos uploaded yet.</p>
+            
+            {filteredFiles.length === 0 ? (
+              <p className="text-[#fafaf8]/40">No photos in {selectedCategory === 'All' ? 'gallery' : selectedCategory.toLowerCase()} yet.</p>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {galleryImages.map((url) => (
-                  <div key={url} className="relative group aspect-square overflow-hidden">
-                    <Image src={url} alt="Gallery" fill className="object-cover" sizes="(max-width: 768px) 50vw, 25vw" />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/60 transition-all flex items-center justify-center">
+                {filteredFiles.map((file) => (
+                  <div key={file.url} className="relative group aspect-square overflow-hidden rounded-lg bg-[#111]">
+                    <div 
+                      className="w-full h-full cursor-pointer"
+                      onClick={() => openPreview(file.url)}
+                    >
+                      <img 
+                        src={file.url} 
+                        alt="Gallery" 
+                        className="w-full h-full object-cover hover:scale-105 transition-transform duration-300" 
+                      />
+                    </div>
+                    
+                    <div 
+                      className="absolute top-2 left-2 z-10 bg-black/50 rounded p-1"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedImages.has(file.url)}
+                        onChange={() => toggleImageSelection(file.url)}
+                        className="w-4 h-4 cursor-pointer accent-[#d4a017]"
+                      />
+                    </div>
+                    
+                    {file.category && file.category !== 'Uncategorized' && (
+                      <div className="absolute top-2 right-2 bg-black/70 px-2 py-1 text-[10px] uppercase tracking-wider rounded">
+                        {file.category}
+                      </div>
+                    )}
+                    
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/60 transition-all flex items-center justify-center pointer-events-none">
                       <button
-                        onClick={() => handleDelete(url)}
-                        className="opacity-0 group-hover:opacity-100 bg-red-500 text-white px-3 py-1 text-xs uppercase tracking-widest transition-opacity"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteClick(file.url);
+                        }}
+                        disabled={deleting === file.url}
+                        className={`pointer-events-auto opacity-0 group-hover:opacity-100 px-4 py-2 text-xs uppercase tracking-widest transition-all ${
+                          deleting === file.url ? 'bg-gray-500 cursor-not-allowed' : 'bg-red-500 hover:bg-red-600'
+                        } text-white rounded`}
                       >
-                        Delete
+                        {deleting === file.url ? 'Deleting...' : 'Delete'}
                       </button>
                     </div>
                   </div>
@@ -269,6 +607,103 @@ export default function AdminPage() {
           </div>
         )}
       </div>
+
+      {/* Image Preview Modal */}
+      {previewImage && (
+        <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-50" onClick={() => setPreviewImage(null)}>
+          <div className="relative max-w-[90vw] max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+            <img 
+              src={previewImage} 
+              alt="Preview" 
+              className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl" 
+            />
+            <button
+              onClick={() => setPreviewImage(null)}
+              className="absolute -top-12 right-0 bg-black/50 text-white w-10 h-10 rounded-full hover:bg-red-500 transition-colors text-xl flex items-center justify-center"
+            >
+              ✕
+            </button>
+            <p className="absolute -bottom-8 left-0 text-[#fafaf8]/60 text-sm">
+              Click anywhere to close
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Single Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-[#111] border border-[#d4a017]/30 p-8 max-w-md w-full mx-4 rounded-lg">
+            <h3 className="font-display text-xl mb-4 text-[#fafaf8]">Delete Photo?</h3>
+            <p className="text-[#fafaf8]/70 mb-6">This action cannot be undone.</p>
+            <div className="flex gap-4 justify-end">
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                className="px-6 py-2 border border-[#fafaf8]/20 text-[#fafaf8] hover:bg-[#fafaf8]/10 transition-colors text-sm uppercase tracking-widest rounded"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="px-6 py-2 bg-red-500 text-white hover:bg-red-600 transition-colors text-sm uppercase tracking-widest rounded"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      {showBulkDeleteModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-[#111] border border-[#d4a017]/30 p-8 max-w-md w-full mx-4 rounded-lg">
+            <h3 className="font-display text-xl mb-4 text-[#fafaf8]">Delete {selectedImages.size} Photos?</h3>
+            <p className="text-[#fafaf8]/70 mb-6">This action cannot be undone.</p>
+            <div className="flex gap-4 justify-end">
+              <button
+                onClick={() => setShowBulkDeleteModal(false)}
+                className="px-6 py-2 border border-[#fafaf8]/20 text-[#fafaf8] hover:bg-[#fafaf8]/10 transition-colors text-sm uppercase tracking-widest rounded"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmBulkDelete}
+                className="px-6 py-2 bg-red-500 text-white hover:bg-red-600 transition-colors text-sm uppercase tracking-widest rounded"
+              >
+                Delete All
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-right-5">
+          <div className={`px-6 py-3 shadow-lg rounded ${
+            toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'
+          } text-white`}>
+            {toast.message}
+          </div>
+        </div>
+      )}
+
+      <style jsx>{`
+        @keyframes slide-in {
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+        .animate-in {
+          animation: slide-in 0.3s ease-out;
+        }
+      `}</style>
     </div>
   );
 }
