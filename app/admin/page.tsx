@@ -39,6 +39,11 @@ export default function AdminPage() {
   const [pendingDeleteUrl, setPendingDeleteUrl] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   
+  // NEW: Booking delete modal states
+  const [showBookingDeleteModal, setShowBookingDeleteModal] = useState(false);
+  const [pendingBookingId, setPendingBookingId] = useState<string | null>(null);
+  const [pendingBookingName, setPendingBookingName] = useState<string>('');
+  
   const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set());
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -134,23 +139,33 @@ export default function AdminPage() {
     }
   };
 
-  // Delete booking function
-  const deleteBooking = async (id: string) => {
-    if (confirm('Delete this booking request?')) {
-      setDeletingBooking(id);
-      const { error } = await supabase
-        .from('bookings')
-        .delete()
-        .eq('id', id);
-      
-      if (error) {
-        showToast('Delete failed: ' + error.message, 'error');
-      } else {
-        showToast('Booking deleted successfully!', 'success');
-        fetchBookings();
-      }
-      setDeletingBooking(null);
+  // Updated delete booking function with custom modal
+  const showDeleteBookingModal = (id: string, name: string) => {
+    setPendingBookingId(id);
+    setPendingBookingName(name);
+    setShowBookingDeleteModal(true);
+  };
+
+  const confirmDeleteBooking = async () => {
+    if (!pendingBookingId) return;
+    
+    setShowBookingDeleteModal(false);
+    setDeletingBooking(pendingBookingId);
+    
+    const { error } = await supabase
+      .from('bookings')
+      .delete()
+      .eq('id', pendingBookingId);
+    
+    if (error) {
+      showToast('Delete failed: ' + error.message, 'error');
+    } else {
+      showToast('Booking deleted successfully!', 'success');
+      fetchBookings();
     }
+    setDeletingBooking(null);
+    setPendingBookingId(null);
+    setPendingBookingName('');
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -259,7 +274,8 @@ export default function AdminPage() {
     }
   };
 
-  const toggleImageSelection = (url: string) => {
+  const toggleImageSelection = (url: string, e: React.MouseEvent) => {
+    e.stopPropagation();
     const newSelection = new Set(selectedImages);
     if (newSelection.has(url)) {
       newSelection.delete(url);
@@ -298,7 +314,8 @@ export default function AdminPage() {
     return galleryFiles.filter(file => file.category === selectedCategory);
   };
 
-  const openPreview = (url: string) => {
+  const openPreview = (url: string, e: React.MouseEvent) => {
+    e.stopPropagation();
     setPreviewImage(url);
   };
 
@@ -393,7 +410,7 @@ export default function AdminPage() {
 
       <div className="px-4 sm:px-6 py-8 max-w-7xl mx-auto">
 
-        {/* Bookings Tab - WITH DELETE BUTTON */}
+        {/* Bookings Tab - WITH CUSTOM DELETE MODAL */}
         {activeTab === 'bookings' && (
           <div>
             <h2 className="font-display text-2xl font-light mb-6">
@@ -405,7 +422,6 @@ export default function AdminPage() {
               <div className="flex flex-col gap-4">
                {bookings.map((booking) => (
                   <div key={booking.id} className="bg-[#111] border border-[#fafaf8]/10 p-4 sm:p-6 hover:border-[#d4a017]/30 transition-colors">
-                    {/* First row - 2 columns on mobile, 4 on desktop */}
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4">
                       <div>
                         <p className="text-[#d4a017] text-xs uppercase tracking-widest mb-1">Name</p>
@@ -425,7 +441,6 @@ export default function AdminPage() {
                       </div>
                     </div>
                     
-                    {/* Second row - stacked on mobile, side by side on desktop */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 pt-4 border-t border-[#fafaf8]/5">
                       <div>
                         <p className="text-[#d4a017] text-xs uppercase tracking-widest mb-1">Email</p>
@@ -451,10 +466,9 @@ export default function AdminPage() {
                       </div>
                     )}
                     
-                    {/* DELETE BOOKING BUTTON - Added here */}
                     <div className="mt-4 pt-4 border-t border-[#fafaf8]/5 flex justify-end">
                       <button
-                        onClick={() => deleteBooking(booking.id)}
+                        onClick={() => showDeleteBookingModal(booking.id, booking.name)}
                         disabled={deletingBooking === booking.id}
                         className={`text-red-400 hover:text-red-300 text-xs uppercase tracking-widest transition-colors ${
                           deletingBooking === booking.id ? 'opacity-50 cursor-not-allowed' : ''
@@ -497,7 +511,6 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* Category Selection for Upload */}
             <div className="mb-4 flex items-center gap-3 flex-wrap">
               <span className="text-xs text-[#fafaf8]/60 uppercase tracking-widest">Upload to:</span>
               <select
@@ -511,7 +524,6 @@ export default function AdminPage() {
               </select>
             </div>
 
-            {/* Category Filter - Scrollable on mobile */}
             <div className="mb-6 flex gap-2 flex-wrap overflow-x-auto pb-2">
               {categories.map(cat => {
                 const count = cat === 'All' 
@@ -540,7 +552,6 @@ export default function AdminPage() {
               </button>
             </div>
 
-            {/* New Category Input */}
             {showCategoryInput && (
               <div className="mb-6 flex gap-2">
                 <input
@@ -559,7 +570,6 @@ export default function AdminPage() {
               </div>
             )}
 
-            {/* Drag and Drop Zone */}
             <div
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
@@ -587,12 +597,13 @@ export default function AdminPage() {
                   <div key={file.url} className="relative group aspect-square overflow-hidden rounded-lg bg-[#111]">
                     <div 
                       className="w-full h-full cursor-pointer"
-                      onClick={() => openPreview(file.url)}
+                      onClick={(e) => openPreview(file.url, e)}
                     >
                       <img 
                         src={file.url} 
                         alt="Gallery" 
                         className="w-full h-full object-cover hover:scale-105 transition-transform duration-300" 
+                        draggable="false"
                       />
                     </div>
                     
@@ -603,7 +614,8 @@ export default function AdminPage() {
                       <input
                         type="checkbox"
                         checked={selectedImages.has(file.url)}
-                        onChange={() => toggleImageSelection(file.url)}
+                        onChange={() => {}}
+                        onClick={(e) => toggleImageSelection(file.url, e)}
                         className="w-4 h-4 sm:w-5 sm:h-5 cursor-pointer accent-[#d4a017]"
                       />
                     </div>
@@ -614,14 +626,17 @@ export default function AdminPage() {
                       </div>
                     )}
                     
-                    <div className="absolute inset-0 bg-black/0 sm:group-hover:bg-black/60 transition-all flex items-center justify-center">
+                    <div 
+                      className="absolute inset-0 bg-black/0 sm:group-hover:bg-black/60 transition-all flex items-center justify-center pointer-events-none"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDeleteClick(file.url);
                         }}
                         disabled={deleting === file.url}
-                        className={`px-3 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs uppercase tracking-widest transition-all ${
+                        className={`pointer-events-auto px-3 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs uppercase tracking-widest transition-all ${
                           deleting === file.url ? 'bg-gray-500 cursor-not-allowed' : 'bg-red-500 hover:bg-red-600'
                         } text-white rounded sm:opacity-0 sm:group-hover:opacity-100 opacity-100`}
                       >
@@ -636,9 +651,42 @@ export default function AdminPage() {
         )}
       </div>
 
+      {/* Booking Delete Confirmation Modal - NEW */}
+      {showBookingDeleteModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-[#111] border border-[#d4a017]/30 p-6 sm:p-8 max-w-md w-full mx-4 rounded-lg">
+            <h3 className="font-display text-xl mb-4 text-[#fafaf8]">Delete Booking?</h3>
+            <p className="text-[#fafaf8]/70 mb-2">
+              Are you sure you want to delete the booking request from:
+            </p>
+            <p className="text-[#d4a017] font-medium mb-6 break-words">
+              {pendingBookingName}
+            </p>
+            <p className="text-[#fafaf8]/50 text-sm mb-6">This action cannot be undone.</p>
+            <div className="flex gap-4 justify-end">
+              <button
+                onClick={() => setShowBookingDeleteModal(false)}
+                className="px-4 sm:px-6 py-2 border border-[#fafaf8]/20 text-[#fafaf8] hover:bg-[#fafaf8]/10 transition-colors text-sm uppercase tracking-widest rounded"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteBooking}
+                className="px-4 sm:px-6 py-2 bg-red-500 text-white hover:bg-red-600 transition-colors text-sm uppercase tracking-widest rounded"
+              >
+                Delete Booking
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Image Preview Modal */}
       {previewImage && (
-        <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-50" onClick={() => setPreviewImage(null)}>
+        <div 
+          className="fixed inset-0 bg-black/95 flex items-center justify-center z-50" 
+          onClick={() => setPreviewImage(null)}
+        >
           <div className="relative max-w-[90vw] max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
             <img 
               src={previewImage} 
