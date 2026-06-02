@@ -33,6 +33,7 @@ export default function AdminPage() {
   const [uploadSuccess, setUploadSuccess] = useState('');
   const [galleryFiles, setGalleryFiles] = useState<GalleryFile[]>([]);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [deletingBooking, setDeletingBooking] = useState<string | null>(null);
   
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [pendingDeleteUrl, setPendingDeleteUrl] = useState<string | null>(null);
@@ -130,6 +131,25 @@ export default function AdminPage() {
       const uniqueCategories = new Set(filesWithUrls.map(f => f.category));
       const sortedCategories = ['All', ...Array.from(uniqueCategories).filter(c => c !== 'Uncategorized').sort(), 'Uncategorized'];
       setCategories(sortedCategories);
+    }
+  };
+
+  // Delete booking function
+  const deleteBooking = async (id: string) => {
+    if (confirm('Delete this booking request?')) {
+      setDeletingBooking(id);
+      const { error } = await supabase
+        .from('bookings')
+        .delete()
+        .eq('id', id);
+      
+      if (error) {
+        showToast('Delete failed: ' + error.message, 'error');
+      } else {
+        showToast('Booking deleted successfully!', 'success');
+        fetchBookings();
+      }
+      setDeletingBooking(null);
     }
   };
 
@@ -373,7 +393,7 @@ export default function AdminPage() {
 
       <div className="px-4 sm:px-6 py-8 max-w-7xl mx-auto">
 
-        {/* Bookings Tab - FIXED MOBILE LAYOUT */}
+        {/* Bookings Tab - WITH DELETE BUTTON */}
         {activeTab === 'bookings' && (
           <div>
             <h2 className="font-display text-2xl font-light mb-6">
@@ -405,7 +425,7 @@ export default function AdminPage() {
                       </div>
                     </div>
                     
-                    {/* Second row - FIXED: stacked on mobile, side by side on desktop */}
+                    {/* Second row - stacked on mobile, side by side on desktop */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 pt-4 border-t border-[#fafaf8]/5">
                       <div>
                         <p className="text-[#d4a017] text-xs uppercase tracking-widest mb-1">Email</p>
@@ -430,6 +450,19 @@ export default function AdminPage() {
                         <p className="text-[#fafaf8]/60 text-sm break-words">{booking.message}</p>
                       </div>
                     )}
+                    
+                    {/* DELETE BOOKING BUTTON - Added here */}
+                    <div className="mt-4 pt-4 border-t border-[#fafaf8]/5 flex justify-end">
+                      <button
+                        onClick={() => deleteBooking(booking.id)}
+                        disabled={deletingBooking === booking.id}
+                        className={`text-red-400 hover:text-red-300 text-xs uppercase tracking-widest transition-colors ${
+                          deletingBooking === booking.id ? 'opacity-50 cursor-not-allowed' : ''
+                        }`}
+                      >
+                        {deletingBooking === booking.id ? 'Deleting...' : 'Delete Booking'}
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -437,7 +470,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Gallery Tab - FIXED MOBILE DELETE BUTTON */}
+        {/* Gallery Tab */}
         {activeTab === 'gallery' && (
           <div>
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
@@ -581,7 +614,6 @@ export default function AdminPage() {
                       </div>
                     )}
                     
-                    {/* FIXED: Delete button always visible on mobile, on hover for desktop */}
                     <div className="absolute inset-0 bg-black/0 sm:group-hover:bg-black/60 transition-all flex items-center justify-center">
                       <button
                         onClick={(e) => {
@@ -626,7 +658,7 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* Single Delete Confirmation Modal - Fixed text */}
+      {/* Single Delete Confirmation Modal */}
       {showDeleteModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
           <div className="bg-[#111] border border-[#d4a017]/30 p-6 sm:p-8 max-w-md w-full mx-4 rounded-lg">
@@ -650,7 +682,7 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* Bulk Delete Confirmation Modal - Fixed text */}
+      {/* Bulk Delete Confirmation Modal */}
       {showBulkDeleteModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
           <div className="bg-[#111] border border-[#d4a017]/30 p-6 sm:p-8 max-w-md w-full mx-4 rounded-lg">
