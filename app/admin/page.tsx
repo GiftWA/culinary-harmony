@@ -48,7 +48,6 @@ export default function AdminPage() {
   const [showCategoryInput, setShowCategoryInput] = useState(false);
   const [uploadCategory, setUploadCategory] = useState<string>('Uncategorized');
 
-  // Load categories from localStorage on mount
   useEffect(() => {
     const savedCategories = localStorage.getItem('galleryCategories');
     if (savedCategories) {
@@ -98,26 +97,21 @@ export default function AdminPage() {
       return;
     }
     if (data) {
-      // Get saved categories from localStorage
       const savedCategories = localStorage.getItem('galleryCategories');
       let knownCategories: string[] = savedCategories ? JSON.parse(savedCategories) : [];
       
       const filesWithUrls = data.map((file) => {
         let category = 'Uncategorized';
         const fileName = file.name;
-        
-        // Check for category prefix in filename (format: "category_filename.jpg")
         const underscoreIndex = fileName.indexOf('_');
         if (underscoreIndex > 0) {
           const potentialCategory = fileName.substring(0, underscoreIndex);
           const formattedCategory = potentialCategory.charAt(0).toUpperCase() + potentialCategory.slice(1);
           
-          // If this category exists in known categories OR is a common category
           if (knownCategories.includes(formattedCategory)) {
             category = formattedCategory;
           } else if (['Wedding', 'Birthday', 'Corporate', 'Events', 'Bridal', 'Party', 'Shower'].includes(formattedCategory)) {
             category = formattedCategory;
-            // Add to known categories
             if (!knownCategories.includes(formattedCategory)) {
               knownCategories.push(formattedCategory);
               localStorage.setItem('galleryCategories', JSON.stringify(knownCategories));
@@ -133,8 +127,6 @@ export default function AdminPage() {
       });
       
       setGalleryFiles(filesWithUrls);
-      
-      // Build categories list (excluding duplicates)
       const uniqueCategories = new Set(filesWithUrls.map(f => f.category));
       const sortedCategories = ['All', ...Array.from(uniqueCategories).filter(c => c !== 'Uncategorized').sort(), 'Uncategorized'];
       setCategories(sortedCategories);
@@ -344,7 +336,7 @@ export default function AdminPage() {
     <div className="min-h-screen bg-[#0a0a0a] text-[#fafaf8]">
 
       {/* Header */}
-      <div className="bg-[#111] border-b border-[#d4a017]/20 px-6 py-4 flex items-center justify-between">
+      <div className="bg-[#111] border-b border-[#d4a017]/20 px-4 sm:px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <img src="/images/logo-circle.png" alt="Logo" width={40} height={40} className="rounded-full border border-[#d4a017]/40" />
           <div>
@@ -361,8 +353,8 @@ export default function AdminPage() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-[#fafaf8]/10 px-6">
-        <div className="flex gap-8">
+      <div className="border-b border-[#fafaf8]/10 px-4 sm:px-6">
+        <div className="flex gap-4 sm:gap-8">
           {(['bookings', 'gallery'] as const).map((tab) => (
             <button
               key={tab}
@@ -379,9 +371,9 @@ export default function AdminPage() {
         </div>
       </div>
 
-      <div className="px-6 py-8 max-w-7xl mx-auto">
+      <div className="px-4 sm:px-6 py-8 max-w-7xl mx-auto">
 
-        {/* Bookings Tab */}
+        {/* Bookings Tab - FIXED MOBILE LAYOUT */}
         {activeTab === 'bookings' && (
           <div>
             <h2 className="font-display text-2xl font-light mb-6">
@@ -392,33 +384,36 @@ export default function AdminPage() {
             ) : (
               <div className="flex flex-col gap-4">
                {bookings.map((booking) => (
-                  <div key={booking.id} className="bg-[#111] border border-[#fafaf8]/10 p-6 hover:border-[#d4a017]/30 transition-colors">
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                  <div key={booking.id} className="bg-[#111] border border-[#fafaf8]/10 p-4 sm:p-6 hover:border-[#d4a017]/30 transition-colors">
+                    {/* First row - 2 columns on mobile, 4 on desktop */}
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4">
                       <div>
                         <p className="text-[#d4a017] text-xs uppercase tracking-widest mb-1">Name</p>
-                        <p className="text-[#fafaf8] font-medium">{booking.name}</p>
+                        <p className="text-[#fafaf8] font-medium text-sm sm:text-base break-words">{booking.name}</p>
                       </div>
                       <div>
                         <p className="text-[#d4a017] text-xs uppercase tracking-widest mb-1">Occasion</p>
-                        <p className="text-[#fafaf8]">{booking.occasion}</p>
+                        <p className="text-[#fafaf8] text-sm sm:text-base break-words">{booking.occasion}</p>
                       </div>
                       <div>
                         <p className="text-[#d4a017] text-xs uppercase tracking-widest mb-1">Event Date</p>
-                        <p className="text-[#fafaf8]">{new Date(booking.event_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+                        <p className="text-[#fafaf8] text-sm sm:text-base">{new Date(booking.event_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
                       </div>
                       <div>
                         <p className="text-[#d4a017] text-xs uppercase tracking-widest mb-1">Guests</p>
-                        <p className="text-[#fafaf8]">{booking.guests} people</p>
+                        <p className="text-[#fafaf8] text-sm sm:text-base">{booking.guests} people</p>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t border-[#fafaf8]/5">
+                    
+                    {/* Second row - FIXED: stacked on mobile, side by side on desktop */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 pt-4 border-t border-[#fafaf8]/5">
                       <div>
                         <p className="text-[#d4a017] text-xs uppercase tracking-widest mb-1">Email</p>
-                        <a href={`mailto:${booking.email}`} className="text-[#fafaf8]/70 text-sm hover:text-[#d4a017]">{booking.email}</a>
+                        <a href={`mailto:${booking.email}`} className="text-[#fafaf8]/70 text-sm hover:text-[#d4a017] break-words block">{booking.email}</a>
                       </div>
                       <div>
                         <p className="text-[#d4a017] text-xs uppercase tracking-widest mb-1">Phone</p>
-                        <a href={`tel:${booking.phone}`} className="text-[#fafaf8]/70 text-sm hover:text-[#d4a017]">{booking.phone}</a>
+                        <a href={`tel:${booking.phone}`} className="text-[#fafaf8]/70 text-sm hover:text-[#d4a017] break-words block">{booking.phone}</a>
                       </div>
                       <div>
                         <p className="text-[#d4a017] text-xs uppercase tracking-widest mb-1">Date Received</p>
@@ -432,7 +427,7 @@ export default function AdminPage() {
                     {booking.message && (
                       <div className="mt-4 pt-4 border-t border-[#fafaf8]/5">
                         <p className="text-[#d4a017] text-xs uppercase tracking-widest mb-1">Message</p>
-                        <p className="text-[#fafaf8]/60 text-sm">{booking.message}</p>
+                        <p className="text-[#fafaf8]/60 text-sm break-words">{booking.message}</p>
                       </div>
                     )}
                   </div>
@@ -442,27 +437,27 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Gallery Tab */}
+        {/* Gallery Tab - FIXED MOBILE DELETE BUTTON */}
         {activeTab === 'gallery' && (
           <div>
-            <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
               <h2 className="font-display text-2xl font-light">Gallery Photos</h2>
-              <div className="flex gap-3">
+              <div className="flex gap-3 w-full sm:w-auto">
                 {selectedImages.size > 0 && (
                   <button
                     onClick={() => setShowBulkDeleteModal(true)}
-                    className="bg-red-500 text-white px-6 py-3 text-xs font-bold tracking-[0.15em] uppercase hover:bg-red-600 transition-colors"
+                    className="bg-red-500 text-white px-4 sm:px-6 py-3 text-xs font-bold tracking-[0.15em] uppercase hover:bg-red-600 transition-colors flex-1 sm:flex-none"
                   >
                     Delete Selected ({selectedImages.size})
                   </button>
                 )}
                 <button
                   onClick={selectAll}
-                  className="border border-[#d4a017] text-[#d4a017] px-6 py-3 text-xs font-bold tracking-[0.15em] uppercase hover:bg-[#d4a017]/10 transition-colors"
+                  className="border border-[#d4a017] text-[#d4a017] px-4 sm:px-6 py-3 text-xs font-bold tracking-[0.15em] uppercase hover:bg-[#d4a017]/10 transition-colors flex-1 sm:flex-none"
                 >
                   {selectedImages.size === filteredFiles.length && filteredFiles.length > 0 ? 'Deselect All' : 'Select All'}
                 </button>
-                <label className={`bg-[#d4a017] text-[#0a0a0a] px-6 py-3 text-xs font-bold tracking-[0.15em] uppercase cursor-pointer hover:bg-[#e8c04a] transition-colors ${isDragging ? 'ring-2 ring-white' : ''}`}>
+                <label className={`bg-[#d4a017] text-[#0a0a0a] px-4 sm:px-6 py-3 text-xs font-bold tracking-[0.15em] uppercase cursor-pointer hover:bg-[#e8c04a] transition-colors text-center flex-1 sm:flex-none ${isDragging ? 'ring-2 ring-white' : ''}`}>
                   {uploading ? 'Uploading...' : '+ Upload Photo'}
                   <input type="file" accept="image/*" multiple onChange={handleFileInput} className="hidden" disabled={uploading} />
                 </label>
@@ -483,8 +478,8 @@ export default function AdminPage() {
               </select>
             </div>
 
-            {/* Category Filter */}
-            <div className="mb-6 flex gap-2 flex-wrap">
+            {/* Category Filter - Scrollable on mobile */}
+            <div className="mb-6 flex gap-2 flex-wrap overflow-x-auto pb-2">
               {categories.map(cat => {
                 const count = cat === 'All' 
                   ? galleryFiles.length 
@@ -494,7 +489,7 @@ export default function AdminPage() {
                   <button
                     key={cat}
                     onClick={() => setSelectedCategory(cat)}
-                    className={`px-4 py-2 text-xs uppercase tracking-widest transition-colors ${
+                    className={`whitespace-nowrap px-3 sm:px-4 py-2 text-xs uppercase tracking-widest transition-colors ${
                       selectedCategory === cat
                         ? 'bg-[#d4a017] text-[#0a0a0a]'
                         : 'border border-[#fafaf8]/20 text-[#fafaf8]/60 hover:border-[#d4a017] hover:text-[#d4a017]'
@@ -506,7 +501,7 @@ export default function AdminPage() {
               })}
               <button
                 onClick={() => setShowCategoryInput(!showCategoryInput)}
-                className="px-4 py-2 text-xs uppercase tracking-widest border border-dashed border-[#fafaf8]/20 text-[#fafaf8]/60 hover:border-[#d4a017] hover:text-[#d4a017]"
+                className="whitespace-nowrap px-3 sm:px-4 py-2 text-xs uppercase tracking-widest border border-dashed border-[#fafaf8]/20 text-[#fafaf8]/60 hover:border-[#d4a017] hover:text-[#d4a017]"
               >
                 + New Category
               </button>
@@ -536,11 +531,11 @@ export default function AdminPage() {
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              className={`mb-6 border-2 border-dashed transition-colors p-8 text-center ${
+              className={`mb-6 border-2 border-dashed transition-colors p-4 sm:p-8 text-center ${
                 isDragging ? 'border-[#d4a017] bg-[#d4a017]/10' : 'border-[#fafaf8]/20'
               }`}
             >
-              <p className="text-[#fafaf8]/60 text-sm">
+              <p className="text-[#fafaf8]/60 text-xs sm:text-sm">
                 {isDragging ? 'Drop your photos here!' : `📸 Drag & drop photos here (will be saved to "${uploadCategory}" category)`}
               </p>
             </div>
@@ -554,7 +549,7 @@ export default function AdminPage() {
             {filteredFiles.length === 0 ? (
               <p className="text-[#fafaf8]/40">No photos in {selectedCategory === 'All' ? 'gallery' : selectedCategory.toLowerCase()} yet.</p>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
                 {filteredFiles.map((file) => (
                   <div key={file.url} className="relative group aspect-square overflow-hidden rounded-lg bg-[#111]">
                     <div 
@@ -576,26 +571,27 @@ export default function AdminPage() {
                         type="checkbox"
                         checked={selectedImages.has(file.url)}
                         onChange={() => toggleImageSelection(file.url)}
-                        className="w-4 h-4 cursor-pointer accent-[#d4a017]"
+                        className="w-4 h-4 sm:w-5 sm:h-5 cursor-pointer accent-[#d4a017]"
                       />
                     </div>
                     
                     {file.category && file.category !== 'Uncategorized' && (
-                      <div className="absolute top-2 right-2 bg-black/70 px-2 py-1 text-[10px] uppercase tracking-wider rounded">
+                      <div className="absolute top-2 right-2 bg-black/70 px-1.5 sm:px-2 py-0.5 sm:py-1 text-[8px] sm:text-[10px] uppercase tracking-wider rounded">
                         {file.category}
                       </div>
                     )}
                     
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/60 transition-all flex items-center justify-center pointer-events-none">
+                    {/* FIXED: Delete button always visible on mobile, on hover for desktop */}
+                    <div className="absolute inset-0 bg-black/0 sm:group-hover:bg-black/60 transition-all flex items-center justify-center">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDeleteClick(file.url);
                         }}
                         disabled={deleting === file.url}
-                        className={`pointer-events-auto opacity-0 group-hover:opacity-100 px-4 py-2 text-xs uppercase tracking-widest transition-all ${
+                        className={`px-3 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs uppercase tracking-widest transition-all ${
                           deleting === file.url ? 'bg-gray-500 cursor-not-allowed' : 'bg-red-500 hover:bg-red-600'
-                        } text-white rounded`}
+                        } text-white rounded sm:opacity-0 sm:group-hover:opacity-100 opacity-100`}
                       >
                         {deleting === file.url ? 'Deleting...' : 'Delete'}
                       </button>
@@ -630,22 +626,22 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* Single Delete Confirmation Modal */}
+      {/* Single Delete Confirmation Modal - Fixed text */}
       {showDeleteModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-[#111] border border-[#d4a017]/30 p-8 max-w-md w-full mx-4 rounded-lg">
+          <div className="bg-[#111] border border-[#d4a017]/30 p-6 sm:p-8 max-w-md w-full mx-4 rounded-lg">
             <h3 className="font-display text-xl mb-4 text-[#fafaf8]">Delete Photo?</h3>
             <p className="text-[#fafaf8]/70 mb-6">This action cannot be undone.</p>
             <div className="flex gap-4 justify-end">
               <button
                 onClick={() => setShowDeleteModal(false)}
-                className="px-6 py-2 border border-[#fafaf8]/20 text-[#fafaf8] hover:bg-[#fafaf8]/10 transition-colors text-sm uppercase tracking-widest rounded"
+                className="px-4 sm:px-6 py-2 border border-[#fafaf8]/20 text-[#fafaf8] hover:bg-[#fafaf8]/10 transition-colors text-sm uppercase tracking-widest rounded"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmDelete}
-                className="px-6 py-2 bg-red-500 text-white hover:bg-red-600 transition-colors text-sm uppercase tracking-widest rounded"
+                className="px-4 sm:px-6 py-2 bg-red-500 text-white hover:bg-red-600 transition-colors text-sm uppercase tracking-widest rounded"
               >
                 Delete
               </button>
@@ -654,24 +650,26 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* Bulk Delete Confirmation Modal */}
+      {/* Bulk Delete Confirmation Modal - Fixed text */}
       {showBulkDeleteModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-[#111] border border-[#d4a017]/30 p-8 max-w-md w-full mx-4 rounded-lg">
-            <h3 className="font-display text-xl mb-4 text-[#fafaf8]">Delete {selectedImages.size} Photos?</h3>
+          <div className="bg-[#111] border border-[#d4a017]/30 p-6 sm:p-8 max-w-md w-full mx-4 rounded-lg">
+            <h3 className="font-display text-xl mb-4 text-[#fafaf8]">
+              Delete {selectedImages.size} {selectedImages.size === 1 ? 'Photo' : 'Photos'}?
+            </h3>
             <p className="text-[#fafaf8]/70 mb-6">This action cannot be undone.</p>
             <div className="flex gap-4 justify-end">
               <button
                 onClick={() => setShowBulkDeleteModal(false)}
-                className="px-6 py-2 border border-[#fafaf8]/20 text-[#fafaf8] hover:bg-[#fafaf8]/10 transition-colors text-sm uppercase tracking-widest rounded"
+                className="px-4 sm:px-6 py-2 border border-[#fafaf8]/20 text-[#fafaf8] hover:bg-[#fafaf8]/10 transition-colors text-sm uppercase tracking-widest rounded"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmBulkDelete}
-                className="px-6 py-2 bg-red-500 text-white hover:bg-red-600 transition-colors text-sm uppercase tracking-widest rounded"
+                className="px-4 sm:px-6 py-2 bg-red-500 text-white hover:bg-red-600 transition-colors text-sm uppercase tracking-widest rounded"
               >
-                Delete All
+                Delete {selectedImages.size === 1 ? 'Photo' : 'All'}
               </button>
             </div>
           </div>
@@ -683,7 +681,7 @@ export default function AdminPage() {
         <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-right-5">
           <div className={`px-6 py-3 shadow-lg rounded ${
             toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'
-          } text-white`}>
+          } text-white text-sm`}>
             {toast.message}
           </div>
         </div>
