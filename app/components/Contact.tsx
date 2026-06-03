@@ -13,28 +13,45 @@ export default function Contact() {
   const [error, setError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
+  e.preventDefault();
+  setLoading(true);
+  setError('');
 
-    const { error } = await supabase.from('bookings').insert([{
+  // Save to Supabase
+  const { error: dbError } = await supabase.from('bookings').insert([{
+    name: form.name,
+    email: form.email,
+    phone: form.phone,
+    occasion: form.occasion,
+    event_date: form.date,
+    guests: parseInt(form.guests),
+    message: form.message,
+  }]);
+
+  if (dbError) {
+    setError('Something went wrong. Please try again or call us directly.');
+    setLoading(false);
+    return;
+  }
+
+  // Send email notification
+  await fetch('/api/send-booking', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
       name: form.name,
       email: form.email,
       phone: form.phone,
       occasion: form.occasion,
       event_date: form.date,
-      guests: parseInt(form.guests),
+      guests: form.guests,
       message: form.message,
-    }]);
+    }),
+  });
 
-    if (error) {
-      setError('Something went wrong. Please try again or call us directly.');
-      setLoading(false);
-    } else {
-      setSubmitted(true);
-      setLoading(false);
-    }
-  };
+  setSubmitted(true);
+  setLoading(false);
+};
 
   return (
     <section id="contact" className="bg-[#111] py-24 px-6 lg:px-16">
