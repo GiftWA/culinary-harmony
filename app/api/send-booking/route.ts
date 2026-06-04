@@ -10,7 +10,7 @@ export async function POST(request: Request) {
   try {
     await resend.emails.send({
       from: 'Culinary Harmony <onboarding@resend.dev>',
-      to: ['giftwasili27@gmail.com', 'lawsonphiri28@gmail.com'],
+      to: 'giftwasili27@gmail.com',
       subject: `New Booking Request - ${occasion} - ${name}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0a0a0a; color: #fafaf8; padding: 40px; border-radius: 8px;">
